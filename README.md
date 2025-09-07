@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/iter-merge)](https://crates.io/crates/iter-merge)
 [![Documentation](https://docs.rs/iter-merge/badge.svg)](https://docs.rs/iter-merge)
-<!-- [![Build Status](https://github.com/username/iter-merge/workflows/CI/badge.svg)](https://github.com/username/iter-merge/actions) -->
+[![CI Test Status](https://github.com/Andrew-Morozko/iter-merge/actions/workflows/Tests.yml/badge.svg)](https://github.com/Andrew-Morozko/iter-merge/actions/workflows/Tests.yml)
 
 A high-performance iterator merging library for Rust that efficiently combines multiple iterators into a single iterator, yielding smallest item first.
 
