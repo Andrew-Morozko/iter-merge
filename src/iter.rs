@@ -150,7 +150,8 @@ where
         res
     }
 
-    // Expects len > 2, min_idx and next_min_idx to be correct for up to new_item_idx
+    /// Expects len > 2, min_idx and next_min_idx to be correct for up to new_item_idx.
+    /// Results in min_idx and next_min_idx being correct for up to and including new_item_idx.
     #[inline]
     fn upd_idx_n(&mut self, new_item_idx: usize) {
         debug_assert!(self.peek_iters.len() > 2);
@@ -169,10 +170,11 @@ where
         }
     }
 
-    // Expects len == 2
+    /// Expects len >= 2.
+    /// Results in min_idx and next_min_idx being correct for the first two items.
     #[inline]
     fn upd_idx_2(&mut self) {
-        debug_assert!(self.peek_iters.len() == 2);
+        debug_assert!(self.peek_iters.len() >= 2);
         if self.cmp_idx(0, 1).is_le() {
             self.min_idx = 0;
             self.next_min_idx = 1;
@@ -300,6 +302,41 @@ where
         }
     }
 
+    /// Replaces the comparison function and returns a new `MergedIter`.
+    ///
+    /// This method consumes the current iterator and creates a new one with a different
+    /// comparison function. The new iterator will use the provided comparison function
+    /// to determine the ordering of items from the merged iterators.
+    ///
+    /// # Arguments
+    ///
+    /// * `cmp` - A function that compares two items and returns an `Ordering`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "vec_storage")]
+    /// # {
+    /// use iter_merge::Merged;
+    /// use std::cmp::Ordering;
+    ///
+    /// let mut merged = Merged::new([
+    ///     vec![1, 4],
+    ///     vec![2, 5],
+    ///     vec![3, 6],
+    /// ]).build();
+    ///
+    /// assert_eq!(merged.next(), Some(1));
+    /// assert_eq!(merged.next(), Some(2));
+    /// assert_eq!(merged.next(), Some(3));
+    /// // Reverse the ordering
+    /// let mut merged = merged.replace_cmp(|a, b| b.cmp(a));
+    /// assert_eq!(merged.next(), Some(6));
+    /// assert_eq!(merged.next(), Some(5));
+    /// assert_eq!(merged.next(), Some(4));
+    ///
+    /// # }
+    /// ```
     pub fn replace_cmp<F>(self, cmp: F) -> MergedIter<STABLE_TIE_BREAKING, S, F> where
         F: Fn(&Item, &Item) -> Ordering,
     {
