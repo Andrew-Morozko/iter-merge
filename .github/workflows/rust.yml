@@ -16,7 +16,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install cargo-hack
+      run: cargo install cargo-hack
     - name: Build
-      run: cargo build --verbose
+      run: cargo hack build --feature-powerset --at-least-one-of="vec_storage,stackvec_storage" --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo hack test --feature-powerset --at-least-one-of="vec_storage,stackvec_storage" --verbose
