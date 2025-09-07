@@ -287,3 +287,51 @@ fn test_add_iters() {
     merged.add_iters([vec![2, 4, 6], vec![1, 3, 5]]);
     assert_eq!(merged.into_vec(), vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
 }
+
+#[test]
+fn test_replace_cmp_zero_iterators() {
+    let merged = Merged::new(Vec::<Vec<i32>>::new()).build();
+    let mut reversed = merged.replace_cmp(|a, b| b.cmp(a));
+    let result = reversed.into_vec();
+    assert_eq!(result, vec![]);
+}
+
+#[test]
+fn test_replace_cmp() {
+    let merged = Merged::new([vec![3, 1, 4, 1, 5]]).build();
+    let mut sorted = merged.replace_cmp(|a, b| a.cmp(b));
+    let result = sorted.into_vec();
+    assert_eq!(result, vec![3, 1, 4, 1, 5]);
+}
+
+#[test]
+fn test_replace_cmp_two_iterators() {
+    let mut merged = Merged::new([
+        vec![1, 3, 5],
+        vec![2, 4, 6],
+    ]).build();
+
+    assert_eq!(merged.next(), Some(1));
+    assert_eq!(merged.next(), Some(2));
+    let mut reversed = merged.replace_cmp(|a, b| b.cmp(a));
+    let result = reversed.into_vec();
+
+    assert_eq!(result, vec![4, 6, 3, 5]);
+}
+
+#[test]
+fn test_replace_cmp_three_iterators() {
+    let mut merged = Merged::new([
+        vec![1, 4, 7],
+        vec![2, 5, 8],
+        vec![3, 6, 9],
+    ]).build();
+    assert_eq!(merged.next(), Some(1));
+    assert_eq!(merged.next(), Some(2));
+
+    let mut reversed = merged.replace_cmp(|a, b| b.cmp(a));
+    let result = reversed.into_vec();
+
+    assert_eq!(result, vec![5, 8, 4, 7, 3, 6, 9]);
+}
+
