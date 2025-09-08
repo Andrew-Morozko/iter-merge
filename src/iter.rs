@@ -1,9 +1,8 @@
-use core::{cmp::Ordering, mem};
-
-use crate::storage::Storage;
-
 #[cfg(feature = "vec_storage")]
 use alloc::vec::Vec;
+use core::{cmp::Ordering, mem};
+
+use crate::storage::{SealedToken, Storage};
 
 /// An iterator that pulls the smallest item from multiple iterators.
 ///
@@ -28,14 +27,20 @@ use alloc::vec::Vec;
 /// ```
 #[derive(Debug)]
 pub struct MergedIter<const STABLE_TIE_BREAKING: bool, S, Cmp> {
+    /// Stores (peeked item, iterator) pairs
     peek_iters: S,
+    /// Comparison function for two items
     cmp: Cmp,
+    /// Index of the smallest item in the `peek_iters`
+    /// Always 0 for collections with less than 2 items
     min_idx: usize,
+    /// Index of the second smallest item in the `peek_iters`
+    /// Value is unspecified for collections with less than 2 items
     next_min_idx: usize,
 }
 
-#[expect(private_bounds)]
-impl<const STABLE_TIE_BREAKING: bool, S, Cmp, Item, Iter> MergedIter<STABLE_TIE_BREAKING, S, Cmp>
+impl<const STABLE_TIE_BREAKING: bool, S, Cmp, Item, Iter>
+    MergedIter<STABLE_TIE_BREAKING, S, Cmp>
 where
     Iter: Iterator<Item = Item>,
     Cmp: Fn(&Item, &Item) -> Ordering,
@@ -43,7 +48,7 @@ where
 {
     pub(crate) fn new(cmp: Cmp) -> Self {
         Self {
-            peek_iters: S::new(),
+            peek_iters: S::new(SealedToken),
             cmp,
             min_idx: 0,
             next_min_idx: 1,
@@ -53,7 +58,10 @@ where
     /// Compares two peeked items by indexes
     #[inline(always)]
     fn cmp_idx(&self, idx_a: usize, idx_b: usize) -> Ordering {
-        (self.cmp)(&self.peek_iters.get(idx_a).0, &self.peek_iters.get(idx_b).0)
+        (self.cmp)(
+            &self.peek_iters.get(idx_a, SealedToken).0,
+            &self.peek_iters.get(idx_b, SealedToken).0,
+        )
     }
 
     /// Removes the smallest item-iterator pair, returns the item and leaves
@@ -62,20 +70,20 @@ where
     fn pop_min(&mut self) -> Item {
         let res;
         if STABLE_TIE_BREAKING {
-            res = self.peek_iters.remove(self.min_idx).0;
+            res = self.peek_iters.remove(self.min_idx, SealedToken).0;
             self.min_idx = if self.next_min_idx > self.min_idx {
                 self.next_min_idx - 1
             } else {
                 self.next_min_idx
             };
         } else {
-            res = self.peek_iters.swap_remove(self.min_idx).0;
+            res = self.peek_iters.swap_remove(self.min_idx, SealedToken).0;
             // if self.next_min_idx == self.peek_iters.len()
             // then swap_remove moved second_smallest element to the min_idx position
             // The length of `peek_iters` has already been reduced by `swap_remove` at this point.
             // So `self.peek_iters.len()` is the old length minus one. The condition checks if
             // `next_min_idx` was pointing to the last element of the slice before `swap_remove`.
-            if self.next_min_idx != self.peek_iters.len() {
+            if self.next_min_idx != self.peek_iters.len(SealedToken) {
                 self.min_idx = self.next_min_idx;
             }
         }
@@ -93,7 +101,7 @@ where
                 next_min_idx = i;
             }
         }
-        for i in (self.min_idx + 1)..self.peek_iters.len() {
+        for i in (self.min_idx + 1)..self.peek_iters.len(SealedToken) {
             if self.cmp_idx(i, next_min_idx).is_lt() {
                 next_min_idx = i;
             }
@@ -103,9 +111,12 @@ where
 
     #[inline]
     fn update_after_peek(&mut self) {
-        debug_assert!(self.peek_iters.len() >= 2);
+        debug_assert!(self.peek_iters.len(SealedToken) >= 2);
         match self.cmp_idx(self.min_idx, self.next_min_idx) {
-            Ordering::Equal if STABLE_TIE_BREAKING && self.next_min_idx < self.min_idx => {
+            Ordering::Less => {}
+            Ordering::Equal if !STABLE_TIE_BREAKING || self.min_idx <= self.next_min_idx => {}
+            Ordering::Equal => {
+                // STABLE_TIE_BREAKING && self.next_min_idx < self.min_idx
                 mem::swap(&mut self.next_min_idx, &mut self.min_idx);
                 // second smallest can't be before min_idx (since min_idx
                 // is the first of the smallest elements, and can't be after current
@@ -128,19 +139,18 @@ where
                 self.min_idx = self.next_min_idx;
                 self.find_next_min();
             }
-            _ => {}
         }
     }
 
     /// REQUIRES len >= 1
     #[inline]
     fn produce_next(&mut self) -> Item {
-        debug_assert!(self.peek_iters.len() >= 1);
+        debug_assert!(self.peek_iters.len(SealedToken) >= 1);
         let res;
-        let smallest = self.peek_iters.get_mut(self.min_idx);
+        let smallest = self.peek_iters.get_mut(self.min_idx, SealedToken);
         if let Some(new_peeked) = smallest.1.next() {
             res = mem::replace(&mut smallest.0, new_peeked);
-            if self.peek_iters.len() > 1 {
+            if self.peek_iters.len(SealedToken) > 1 {
                 self.update_after_peek();
             }
         } else {
@@ -154,18 +164,20 @@ where
     /// Results in min_idx and next_min_idx being correct for up to and including new_item_idx.
     #[inline]
     fn upd_idx_n(&mut self, new_item_idx: usize) {
-        debug_assert!(self.peek_iters.len() > 2);
-        if self.cmp_idx(new_item_idx, self.next_min_idx).is_ge(){
+        debug_assert!(self.peek_iters.len(SealedToken) > 2);
+        if self.cmp_idx(new_item_idx, self.next_min_idx).is_ge() {
+            // item is larger or equal to the second smallest
             return;
         }
 
-        // new < next_min
+        // item is smaller than the second smallest
         if self.cmp_idx(new_item_idx, self.min_idx).is_lt() {
-            // new < min <= next_min
+            // item is smaller than the smallest
             self.next_min_idx = self.min_idx;
             self.min_idx = new_item_idx;
         } else {
-            // min <= new <= next_min
+            // item is larger than or equal to the smallest and
+            // smaller than the second smallest
             self.next_min_idx = new_item_idx;
         }
     }
@@ -174,7 +186,7 @@ where
     /// Results in min_idx and next_min_idx being correct for the first two items.
     #[inline]
     fn upd_idx_2(&mut self) {
-        debug_assert!(self.peek_iters.len() >= 2);
+        debug_assert!(self.peek_iters.len(SealedToken) >= 2);
         if self.cmp_idx(0, 1).is_le() {
             self.min_idx = 0;
             self.next_min_idx = 1;
@@ -217,15 +229,15 @@ where
     /// assert_eq!(result, vec![3, 4, 5, 6, 7, 8, 9]);
     /// # }
     /// ```
-    pub fn add_iter(&mut self, iter: impl IntoIterator<IntoIter=Iter>) {
+    pub fn add_iter(&mut self, iter: impl IntoIterator<IntoIter = Iter>) {
         let mut iter = iter.into_iter();
         let Some(peeked) = iter.next() else {
             return;
         };
-        let new_item_idx = self.peek_iters.len();
-        self.peek_iters.push((peeked, iter));
+        let new_item_idx = self.peek_iters.len(SealedToken);
+        self.peek_iters.push((peeked, iter), SealedToken);
         match new_item_idx {
-            0 => {},
+            0 => {}
             1 => self.upd_idx_2(),
             n => self.upd_idx_n(n),
         }
@@ -267,37 +279,42 @@ where
     /// ]);
     ///
     /// let result = merged.into_vec();
-    /// assert_eq!(result, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    /// assert_eq!(
+    ///     result,
+    ///     vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    /// );
     /// # }
     /// ```
     ///
     /// [`add_iter`]: MergedIter::add_iter
-    pub fn add_iters(&mut self, iters: impl IntoIterator<Item = impl IntoIterator<IntoIter=Iter>>) {
+    pub fn add_iters(
+        &mut self, iters: impl IntoIterator<Item = impl IntoIterator<IntoIter = Iter>>,
+    ) {
         let iters = iters.into_iter();
-        self.peek_iters.reserve_for(&iters);
+        self.peek_iters.reserve_for(&iters, SealedToken);
         let mut item_iter = iters.filter_map(|iter| {
             let mut iter = iter.into_iter();
             iter.next().map(|peeked| (peeked, iter))
         });
-        let len = self.peek_iters.len();
+        let len = self.peek_iters.len(SealedToken);
         if len < 2 {
             if len == 0 {
                 let Some(item) = item_iter.next() else {
                     return;
                 };
-                self.peek_iters.push(item);
+                self.peek_iters.push(item, SealedToken);
             }
             // now len == 1
             let Some(item) = item_iter.next() else {
                 return;
             };
-            self.peek_iters.push(item);
+            self.peek_iters.push(item, SealedToken);
             self.upd_idx_2();
         }
         // now len >= 2
         for item in item_iter {
-            let new_item_idx = self.peek_iters.len();
-            self.peek_iters.push(item);
+            let new_item_idx = self.peek_iters.len(SealedToken);
+            self.peek_iters.push(item, SealedToken);
             self.upd_idx_n(new_item_idx);
         }
     }
@@ -317,14 +334,11 @@ where
     /// ```
     /// # #[cfg(feature = "vec_storage")]
     /// # {
-    /// use iter_merge::Merged;
     /// use std::cmp::Ordering;
     ///
-    /// let mut merged = Merged::new([
-    ///     vec![1, 4],
-    ///     vec![2, 5],
-    ///     vec![3, 6],
-    /// ]).build();
+    /// use iter_merge::Merged;
+    ///
+    /// let mut merged = Merged::new([vec![1, 4], vec![2, 5], vec![3, 6]]).build();
     ///
     /// assert_eq!(merged.next(), Some(1));
     /// assert_eq!(merged.next(), Some(2));
@@ -337,7 +351,8 @@ where
     ///
     /// # }
     /// ```
-    pub fn replace_cmp<F>(self, cmp: F) -> MergedIter<STABLE_TIE_BREAKING, S, F> where
+    pub fn replace_cmp<F>(self, cmp: F) -> MergedIter<STABLE_TIE_BREAKING, S, F>
+    where
         F: Fn(&Item, &Item) -> Ordering,
     {
         let mut new = MergedIter {
@@ -346,12 +361,12 @@ where
             min_idx: 0,
             next_min_idx: 1,
         };
-        let len = new.peek_iters.len();
+        let len = new.peek_iters.len(SealedToken);
         if len < 2 {
             return new;
         }
         new.upd_idx_2();
-        for new_item_idx in 2..len{
+        for new_item_idx in 2..len {
             new.upd_idx_n(new_item_idx);
         }
         new
@@ -379,11 +394,11 @@ where
     #[cfg(feature = "vec_storage")]
     pub fn into_vec(&mut self) -> Vec<Item> {
         let mut res = Vec::with_capacity(self.size_hint().0);
-        match self.peek_iters.len() {
+        match self.peek_iters.len(SealedToken) {
             0 => return res,
             1 => {
                 // If we have 1 iterator left - noting to compare it against
-                let (item, rest) = self.peek_iters.swap_remove(0);
+                let (item, rest) = self.peek_iters.swap_remove(0, SealedToken);
                 res.push(item);
                 res.extend(rest);
                 return res;
@@ -392,7 +407,7 @@ where
         }
 
         loop {
-            let min = self.peek_iters.get_mut(self.min_idx);
+            let min = self.peek_iters.get_mut(self.min_idx, SealedToken);
             // following is self.produce_next(), but with last iterator optimization
             if let Some(new_peeked) = min.1.next() {
                 res.push(mem::replace(&mut min.0, new_peeked));
@@ -400,8 +415,8 @@ where
                 self.update_after_peek();
             } else {
                 res.push(self.pop_min());
-                if self.peek_iters.len() == 1 {
-                    let (item, iter) = self.peek_iters.swap_remove(0);
+                if self.peek_iters.len(SealedToken) == 1 {
+                    let (item, iter) = self.peek_iters.swap_remove(0, SealedToken);
                     res.push(item);
                     res.extend(iter);
                     return res;
@@ -441,10 +456,10 @@ where
     where
         Iter: 'a,
     {
-        if self.min_idx >= self.peek_iters.len() {
+        if self.min_idx >= self.peek_iters.len(SealedToken) {
             return None;
         }
-        Some(&self.peek_iters.get(self.min_idx).0)
+        Some(&self.peek_iters.get(self.min_idx, SealedToken).0)
     }
 
     /// Returns the next item of the iterator if it satisfies a predicate.
@@ -475,7 +490,9 @@ where
     ///
     /// [`Peekable::next_if`]: std::iter::Peekable::next_if
     pub fn next_if(&mut self, func: impl FnOnce(&Item) -> bool) -> Option<Item> {
-        if self.peek_iters.len() == 0 || !func(&self.peek_iters.get(self.min_idx).0) {
+        if self.peek_iters.len(SealedToken) == 0
+            || !func(&self.peek_iters.get(self.min_idx, SealedToken).0)
+        {
             return None;
         }
         Some(self.produce_next())
@@ -569,7 +586,7 @@ where
     type Item = Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.peek_iters.len() == 0 {
+        if self.peek_iters.len(SealedToken) == 0 {
             return None;
         }
         Some(self.produce_next())
@@ -577,11 +594,11 @@ where
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         // Accounts for currently peeked items in both lower and upper.
-        let mut lower = self.peek_iters.len();
+        let mut lower = self.peek_iters.len(SealedToken);
         let mut upper = lower;
         let mut has_upper = true;
-        for i in 0..self.peek_iters.len() {
-            let (it_lower, it_upper) = self.peek_iters.get(i).1.size_hint();
+        for i in 0..self.peek_iters.len(SealedToken) {
+            let (it_lower, it_upper) = self.peek_iters.get(i, SealedToken).1.size_hint();
             lower = lower.saturating_add(it_lower);
             if let Some(it_upper) = it_upper {
                 let overflow;
@@ -595,7 +612,8 @@ where
     }
 }
 
-impl<const STABLE_TIE_BREAKING: bool, S, Cmp, Item, Iter> Clone for MergedIter<STABLE_TIE_BREAKING, S, Cmp>
+impl<const STABLE_TIE_BREAKING: bool, S, Cmp, Item, Iter> Clone
+    for MergedIter<STABLE_TIE_BREAKING, S, Cmp>
 where
     Iter: Iterator<Item = Item>,
     Cmp: Clone + Fn(&Item, &Item) -> Ordering,
@@ -610,4 +628,3 @@ where
         }
     }
 }
-

@@ -29,7 +29,12 @@ fn test_all_merge_configurations() {
         // duplicate values
         vec![vec![0, 0, -1], vec![0, 0, 1], vec![0, 0, 0]],
         // mixed lengths
-        vec![vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10], vec![0], vec![11], vec![2, 3]],
+        vec![
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            vec![0],
+            vec![11],
+            vec![2, 3],
+        ],
         // negative numbers
         vec![vec![-5, -3, -1], vec![-4, -2, 0]],
         // tie breaking tests
@@ -38,7 +43,9 @@ fn test_all_merge_configurations() {
         vec![vec![2, 1, 2], vec![1], vec![1, 2, 1], vec![2], vec![1, 2]],
         // identical iterators
         vec![vec![1, 2, 3], vec![1, 2, 3], vec![1, 2, 3]],
-    ].iter().for_each(test_all_merges);
+    ]
+    .iter()
+    .for_each(test_all_merges);
 }
 
 #[test]
@@ -79,10 +86,7 @@ fn test_peek_after_consumption() {
 
 #[test]
 fn test_peek_with_duplicates() {
-    let mut merged = Merged::new([
-        [1, 1, 2],
-        [1, 3, 3]
-    ]).build();
+    let mut merged = Merged::new([[1, 1, 2], [1, 3, 3]]).build();
 
     assert_eq!(merged.peek(), Some(&1));
     assert_eq!(merged.next(), Some(1));
@@ -99,10 +103,7 @@ fn test_peek_with_duplicates() {
 
 #[test]
 fn test_next_if_basic() {
-    let mut merged = Merged::new(vec![
-        vec![1, 1, 2, 3],
-        vec![1, 4],
-    ]).build();
+    let mut merged = Merged::new(vec![vec![1, 1, 2, 3], vec![1, 4]]).build();
 
     // Consume all 1s
     assert_eq!(merged.next_if(|&x| x == 1), Some(1));
@@ -116,10 +117,7 @@ fn test_next_if_basic() {
 
 #[test]
 fn test_next_if_predicate() {
-    let mut merged = Merged::new(vec![
-        vec![1, 2, 3, 4],
-        vec![2, 5],
-    ]).build();
+    let mut merged = Merged::new(vec![vec![1, 2, 3, 4], vec![2, 5]]).build();
 
     // The first element is 1 (from first iterator), which is odd
     assert_eq!(merged.next_if(|&x| x % 2 == 0), None);
@@ -137,10 +135,7 @@ fn test_next_if_empty() {
 
 #[test]
 fn test_next_if_after_consumption() {
-    let mut merged = Merged::new(vec![
-        vec![1, 2],
-        vec![3],
-    ]).build();
+    let mut merged = Merged::new(vec![vec![1, 2], vec![3]]).build();
 
     // Consume all elements
     assert_eq!(merged.next(), Some(1));
@@ -153,10 +148,7 @@ fn test_next_if_after_consumption() {
 
 #[test]
 fn test_next_if_eq_basic() {
-    let mut merged = Merged::new(vec![
-        vec![1, 1, 2, 3],
-        vec![1, 4],
-    ]).build();
+    let mut merged = Merged::new(vec![vec![1, 1, 2, 3], vec![1, 4]]).build();
 
     // Consume all 1s
     assert_eq!(merged.next_if_eq(&1), Some(1));
@@ -170,10 +162,7 @@ fn test_next_if_eq_basic() {
 
 #[test]
 fn test_next_if_eq_different_types() {
-    let mut merged = Merged::new(vec![
-        vec![1, 2, 3],
-        vec![2, 4],
-    ]).build();
+    let mut merged = Merged::new(vec![vec![1, 2, 3], vec![2, 4]]).build();
 
     // The first element is 1, not 2
     let target: i32 = 2;
@@ -230,17 +219,12 @@ fn test_break_up_after_full_consumption() {
     assert_eq!(storage.len(), 0); // All iterators should be exhausted
 }
 
-
-
 #[test]
 fn test_size_hint() {
     let merged = Merged::new(Vec::<Vec<i32>>::new()).build();
     assert_eq!(merged.size_hint(), (0, Some(0)));
 
-    let merged = Merged::new(vec![
-        vec![1, 2, 3],
-        vec![4, 5],
-    ]).build();
+    let merged = Merged::new(vec![vec![1, 2, 3], vec![4, 5]]).build();
 
     assert_eq!(merged.size_hint(), (5, Some(5)));
 
@@ -255,7 +239,6 @@ fn test_size_hint() {
     let iter = 0..5;
     let merged = Merged::new([iter]).build();
     assert_eq!(merged.size_hint(), (5, Some(5)));
-
 
     let iter = (0..5).chain((0..).filter(|_| true));
     let merged = Merged::new([iter]).build();
@@ -306,10 +289,7 @@ fn test_replace_cmp() {
 
 #[test]
 fn test_replace_cmp_two_iterators() {
-    let mut merged = Merged::new([
-        vec![1, 3, 5],
-        vec![2, 4, 6],
-    ]).build();
+    let mut merged = Merged::new([vec![1, 3, 5], vec![2, 4, 6]]).build();
 
     assert_eq!(merged.next(), Some(1));
     assert_eq!(merged.next(), Some(2));
@@ -321,11 +301,7 @@ fn test_replace_cmp_two_iterators() {
 
 #[test]
 fn test_replace_cmp_three_iterators() {
-    let mut merged = Merged::new([
-        vec![1, 4, 7],
-        vec![2, 5, 8],
-        vec![3, 6, 9],
-    ]).build();
+    let mut merged = Merged::new([vec![1, 4, 7], vec![2, 5, 8], vec![3, 6, 9]]).build();
     assert_eq!(merged.next(), Some(1));
     assert_eq!(merged.next(), Some(2));
 
@@ -334,4 +310,3 @@ fn test_replace_cmp_three_iterators() {
 
     assert_eq!(result, vec![5, 8, 4, 7, 3, 6, 9]);
 }
-

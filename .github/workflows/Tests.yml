@@ -11,7 +11,6 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -20,5 +19,23 @@ jobs:
       run: cargo install cargo-hack
     - name: Build
       run: cargo hack build --feature-powerset --at-least-one-of="vec_storage,stackvec_storage" --verbose
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install cargo-hack
+      run: cargo install cargo-hack
     - name: Run tests
       run: cargo hack test --feature-powerset --at-least-one-of="vec_storage,stackvec_storage" --verbose
+
+  msrv:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install cargo-msrv
+      run: cargo install cargo-msrv
+    - name: Run MSRV check
+      run: cargo msrv verify --ignore-lockfile -- cargo test

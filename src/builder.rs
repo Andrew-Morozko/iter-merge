@@ -1,7 +1,6 @@
-use core::{cmp::Ordering, marker::PhantomData};
-
 #[cfg(feature = "vec_storage")]
 use alloc::vec::Vec;
+use core::{cmp::Ordering, marker::PhantomData};
 
 #[cfg(feature = "stackvec_storage")]
 use stackvector::{Array, StackVec};
@@ -73,7 +72,9 @@ where
     /// [`arbitrary_tie_breaking()`]: Merged::arbitrary_tie_breaking
     #[cfg(feature = "vec_storage")]
     #[allow(clippy::type_complexity)]
-    pub const fn new(iters: IterIter) -> Merged<true, (), Vec<(Iter::Item, Iter::IntoIter)>, IterIter> {
+    pub const fn new(
+        iters: IterIter,
+    ) -> Merged<true, (), Vec<(Iter::Item, Iter::IntoIter)>, IterIter> {
         Merged {
             iters,
             cmp: (),
@@ -99,8 +100,7 @@ where
     /// let iter1 = [1, 3, 5];
     /// let iter2 = [2, 4, 6];
     ///
-    /// let mut merged = Merged::new_stackvec::<2>([iter1, iter2])
-    ///     .build();
+    /// let mut merged = Merged::new_stackvec::<2>([iter1, iter2]).build();
     /// let result: [i32; 6] = array::from_fn(|_| merged.next().unwrap());
     ///
     /// assert_eq!(result, [1, 2, 3, 4, 5, 6]);
@@ -109,8 +109,11 @@ where
     /// [building]: crate::Merged::build
     #[cfg(feature = "stackvec_storage")]
     #[allow(clippy::type_complexity)]
-    pub const fn new_stackvec<const N: usize>(iters: IterIter) -> Merged<true, (), StackVec<[(Iter::Item, Iter::IntoIter); N]>, IterIter> where
-        [(Iter::Item, Iter::IntoIter); N]: Array<Item = (Iter::Item, Iter::IntoIter)>
+    pub const fn new_stackvec<const N: usize>(
+        iters: IterIter,
+    ) -> Merged<true, (), StackVec<[(Iter::Item, Iter::IntoIter); N]>, IterIter>
+    where
+        [(Iter::Item, Iter::IntoIter); N]: Array<Item = (Iter::Item, Iter::IntoIter)>,
     {
         Merged {
             iters,
@@ -126,7 +129,6 @@ where
     IterIter: IntoIterator<Item = Iter>,
     Iter: IntoIterator,
 {
-
     /// Sets a custom comparison function for merging.
     ///
     /// By default, the merge uses the `Ord::cmp` (if items implement `Ord`). This method allows you
@@ -188,8 +190,6 @@ where
     }
 }
 
-
-
 impl<Cmp, Storage, IterIter> Merged<true, Cmp, Storage, IterIter> {
     /// Enables arbitrary tie-breaking for the merge operation.
     ///
@@ -206,8 +206,9 @@ impl<Cmp, Storage, IterIter> Merged<true, Cmp, Storage, IterIter> {
     /// ```
     /// # #[cfg(feature = "vec_storage")]
     /// # {
-    /// use iter_merge::Merged;
     /// use std::cmp::Ordering;
+    ///
+    /// use iter_merge::Merged;
     ///
     /// let iter1 = vec![(0, 0)];
     /// let iter2 = vec![(0, 1)];
@@ -235,7 +236,6 @@ impl<Cmp, Storage, IterIter> Merged<true, Cmp, Storage, IterIter> {
     }
 }
 
-
 impl<Cmp, Storage, IterIter> Merged<false, Cmp, Storage, IterIter> {
     /// Enables stable tie-breaking for the merge operation.
     ///
@@ -258,7 +258,6 @@ impl<Cmp, Storage, IterIter> Merged<false, Cmp, Storage, IterIter> {
     }
 }
 
-#[expect(private_bounds)]
 impl<const STABLE_TIE_BREAKING: bool, Storage, IterIter, Iter>
     Merged<STABLE_TIE_BREAKING, (), Storage, IterIter>
 where
@@ -272,7 +271,8 @@ where
     /// [`Ord`]: core::cmp::Ord
     pub fn build(
         self,
-    ) -> MergedIter<STABLE_TIE_BREAKING, Storage, impl Fn(&Iter::Item, &Iter::Item) -> Ordering> {
+    ) -> MergedIter<STABLE_TIE_BREAKING, Storage, impl Fn(&Iter::Item, &Iter::Item) -> Ordering>
+    {
         let Self { iters, .. } = self;
         Merged {
             iters,
@@ -283,7 +283,6 @@ where
     }
 }
 
-#[expect(private_bounds)]
 impl<const STABLE_TIE_BREAKING: bool, Cmp, Storage, IterIter, Iter>
     Merged<STABLE_TIE_BREAKING, Cmp, Storage, IterIter>
 where

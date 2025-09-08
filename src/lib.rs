@@ -14,10 +14,7 @@
 //! let vec1 = vec![1, 3, 5];
 //! let vec2 = vec![2, 4, 6];
 //!
-//! let mut merged = Merged::new([
-//!     vec1.iter().copied(),
-//!     vec2.iter().copied(),
-//! ]).build();
+//! let mut merged = Merged::new([vec1.iter().copied(), vec2.iter().copied()]).build();
 //! let result = merged.into_vec();
 //!
 //! assert_eq!(result, vec![1, 2, 3, 4, 5, 6]);
@@ -32,10 +29,9 @@
 //! # {
 //! use iter_merge::Merged;
 //!
-//! let result = Merged::new([
-//!     vec![2, 1, 5],
-//!     vec![4, 3, 6],
-//! ]).build().into_vec();
+//! let result = Merged::new([vec![2, 1, 5], vec![4, 3, 6]])
+//!     .build()
+//!     .into_vec();
 //!
 //! assert_eq!(result, vec![2, 1, 4, 3, 5, 6]);
 //! # }
@@ -97,9 +93,9 @@
 #[cfg(feature = "vec_storage")]
 extern crate alloc;
 
-mod storage;
 mod builder;
 mod iter;
+mod storage;
 
 pub use builder::Merged;
 pub use iter::MergedIter;

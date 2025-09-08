@@ -18,11 +18,6 @@ Note: only compares the first items across provided iterators. The output would 
 - Dynamic iterator addition after construction
 - Additional [`Peekable`](https://doc.rust-lang.org/std/iter/struct.Peekable.html) methods
 
-
-## Installation
-
-`cargo add iter-merge`
-
 ## Usage
 
 ```rust
@@ -92,16 +87,24 @@ The crate supports several feature flags:
 ## Testing
 
 Run the fuzz test:
-
-```bash
-cargo +nightly fuzzcheck fuzz_merge_correctness --test fuzz
-```
+* Uncomment `For fuzzing` blocks in the [Cargo.toml](Cargo.toml) or run `./toggle_fuzz_config.sh`
+* Run tests:
+  ```bash
+  cargo +nightly fuzzcheck fuzz_merge --test fuzz --profile fuzz
+  cargo +nightly fuzzcheck fuzz_merge_correctness --test fuzz --profile fuzz
+  ```
 
 Run benchmarks:
 
 ```bash
-RUSTFLAGS='-C target-cpu=native' cargo bench
+RUSTFLAGS='-C target-cpu=native --cfg benchmarking'
+cargo bench
 ```
+(Benchmarking dependencies are behind `benchmarking` cfg option to keep MSRV low)
+
+## MSRV
+The minimum supported Rust version for this crate is 1.68.0.
+This may change in a major release, but it is unlikely.
 
 ## Contributing
 

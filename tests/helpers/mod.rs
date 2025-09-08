@@ -35,11 +35,12 @@ struct MergeChecker<'a, T> {
     orig: &'a Vec<Vec<T>>,
 }
 
-impl<'a, T> MergeChecker<'a, T> where
+impl<'a, T> MergeChecker<'a, T>
+where
     T: core::fmt::Debug + Ord,
 {
     fn new(items: &'a Vec<Vec<T>>) -> Self {
-        Self{
+        Self {
             orig: items,
             items: Vec::new(),
         }
@@ -48,8 +49,11 @@ impl<'a, T> MergeChecker<'a, T> where
     fn check_merge(&mut self, merge: impl IntoIterator<Item = LabeledItem<T>>, stable: bool) {
         // reset:
         self.items.clear();
-        self.items.extend(self.orig.iter().map(AsRef::<[T]>::as_ref));
-        merge.into_iter().for_each(|choice| self.check_choice(&choice, stable));
+        self.items
+            .extend(self.orig.iter().map(AsRef::<[T]>::as_ref));
+        merge
+            .into_iter()
+            .for_each(|choice| self.check_choice(&choice, stable));
 
         assert!(
             self.items.iter().all(|it| it.is_empty()),
@@ -62,9 +66,7 @@ impl<'a, T> MergeChecker<'a, T> where
             .items
             .iter()
             .enumerate()
-            .filter_map(|(iter_idx, items)| {
-                items.first().map(|item| (iter_idx, item))
-            })
+            .filter_map(|(iter_idx, items)| items.first().map(|item| (iter_idx, item)))
         {
             match item.cmp(&choice.item) {
                 Ordering::Less => {
@@ -78,35 +80,44 @@ impl<'a, T> MergeChecker<'a, T> where
                         "item from earlier iterator {iter_idx} should've been chosen instead of {choice:?}"
                     );
                 }
-                _ => {},
+                _ => {}
             }
         }
         let Some((item, rest)) = self.items[choice.iter_idx].split_first() else {
             panic!("item was consumed from empty iterator {}", choice.iter_idx);
         };
 
-        assert_eq!(
-            item,
-            &choice.item
-        );
+        assert_eq!(item, &choice.item);
         self.items[choice.iter_idx] = rest;
     }
 }
 
-pub(crate) fn test_all_merges<T>(input: &Vec<Vec<T>>) where
+pub(crate) fn test_all_merges<T>(input: &Vec<Vec<T>>)
+where
     T: Ord + core::fmt::Debug + Copy,
 {
     let mkiter = || {
-        input.iter().enumerate().map(
-            |(iter_idx, items)|
-            items.iter().copied().map(move |item| LabeledItem { item, iter_idx })
-        )
+        input.iter().enumerate().map(|(iter_idx, items)| {
+            items
+                .iter()
+                .copied()
+                .map(move |item| LabeledItem { item, iter_idx })
+        })
     };
 
     let mut checker = MergeChecker::new(input);
 
-    checker.check_merge( Merged::new(mkiter()).build(), true);
-    checker.check_merge( Merged::new(mkiter()).arbitrary_tie_breaking().build(), false);
-    checker.check_merge( Merged::new(mkiter()).build().into_vec(), true);
-    checker.check_merge( Merged::new(mkiter()).arbitrary_tie_breaking().build().into_vec(), false);
+    checker.check_merge(Merged::new(mkiter()).build(), true);
+    checker.check_merge(
+        Merged::new(mkiter()).arbitrary_tie_breaking().build(),
+        false,
+    );
+    checker.check_merge(Merged::new(mkiter()).build().into_vec(), true);
+    checker.check_merge(
+        Merged::new(mkiter())
+            .arbitrary_tie_breaking()
+            .build()
+            .into_vec(),
+        false,
+    );
 }
