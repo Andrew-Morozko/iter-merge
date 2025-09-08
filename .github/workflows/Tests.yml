@@ -37,6 +37,8 @@ jobs:
     - uses: actions/checkout@v4
     - uses: taiki-e/install-action@v2
       with:
-        tool: cargo-hack,cargo-msrv
+        tool: cargo-msrv
     - name: Run MSRV check
-      run: cargo msrv verify --ignore-lockfile -- cargo hack test --feature-powerset --at-least-one-of="vec_storage,stackvec_storage"
+      run:
+      - cargo msrv verify --ignore-lockfile -- cargo test
+      - cargo msrv verify --ignore-lockfile -- cargo test --no-default-features --features="stackvec_storage"
