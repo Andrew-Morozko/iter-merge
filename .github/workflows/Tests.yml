@@ -40,5 +40,5 @@ jobs:
         tool: cargo-msrv
     - name: Run MSRV check
       run:
-      - cargo msrv verify --ignore-lockfile -- cargo test
-      - cargo msrv verify --ignore-lockfile -- cargo test --no-default-features --features="stackvec_storage"
+        cargo msrv verify --ignore-lockfile -- cargo test &&
+        cargo msrv verify --ignore-lockfile -- cargo test --no-default-features --features="stackvec_storage"
