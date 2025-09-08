@@ -16,10 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install cargo-hack
-      uses: baptiste0928/cargo-install@v3
-      with:
-        crate: cargo-hack
-        version: '^0.4.7'
+      uses: taiki-e/install-action@cargo-hack
     - name: Build
       run: cargo hack build --feature-powerset --at-least-one-of="vec_storage,stackvec_storage" --verbose
 
@@ -29,10 +26,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install cargo-hack
-      uses: baptiste0928/cargo-install@v3
-      with:
-        crate: cargo-hack
-        version: '^0.4.7'
+      uses: taiki-e/install-action@cargo-hack
     - name: Run tests
       run: cargo hack test --feature-powerset --at-least-one-of="vec_storage,stackvec_storage" --verbose
 
@@ -41,15 +35,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Install cargo-hack
-      uses: baptiste0928/cargo-install@v3
+    - uses: taiki-e/install-action@v2
       with:
-        crate: cargo-hack
-        version: '^0.4.7'
-    - name: Install cargo-msrv
-      uses: baptiste0928/cargo-install@v3
-      with:
-        crate: cargo-msrv
-        version: '^0.18.4'
+        tool: cargo-hack,cargo-msrv
     - name: Run MSRV check
       run: cargo msrv verify --ignore-lockfile -- cargo hack test --feature-powerset --at-least-one-of="vec_storage,stackvec_storage"
