@@ -6,7 +6,7 @@ criterion::criterion_main!(code::benches);
 #[cfg(not(benchmarking))]
 fn main() {
     panic!(
-        r"Benchmarking disabled! Run bechmarks with:
-    RUSTFLAGS='-C target-cpu=native --cfg benchmarking' cargo bench"
+        "Benchmarking disabled! Run benchmarks with:
+    RUSTFLAGS='-C target-cpu=native --cfg benchmarking' cargo bench --bench benchmarks"
     );
 }

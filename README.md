@@ -10,24 +10,20 @@ Note: only compares the first items across provided iterators. The output would 
 
 ## Features
 
-- Optimized for small to medium numbers of iterators
 - Lazy iterator consumption: each `.next()` advances only one iterator
 - Support for custom comparison functions
-- Multiple storage backends: `Vec` and `StackVec` (for no-std and no-alloc compatibility)
-- Optionally `forbid_unsafe`
-- Dynamic iterator addition after construction
+- Multiple storage backends: `Vec` and `Array` (for no-std and no-alloc compatibility)
 - Additional [`Peekable`](https://doc.rust-lang.org/std/iter/struct.Peekable.html) methods
 
 ## Usage
 
 ```rust
-use iter_merge::Merged;
+use iter_merge::merge;
 
 let iter1 = vec![1, 3, 5, 7];
 let iter2 = vec![2, 4, 6, 8];
 
-let mut merged = Merged::new([iter1, iter2]).build();
-let result = merged.into_vec();
+let result = merge([iter1, iter2]).into_vec();
 
 assert_eq!(result, vec![1, 2, 3, 4, 5, 6, 7, 8]);
 ```
@@ -35,72 +31,50 @@ assert_eq!(result, vec![1, 2, 3, 4, 5, 6, 7, 8]);
 ### Custom Comparison
 
 ```rust
-use iter_merge::Merged;
+use iter_merge::{VecStorage, comparators::ByOrd};
 
-let mut merged = Merged::new([
+let mut merged = VecStorage::from_iter([
     vec![9, 6, 3],
     vec![8, 5, 2],
     vec![7, 4, 1],
 ])
-.with_cmp(|a, b| b.cmp(a))
+.into_builder()
+.max_by(ByOrd)
 .build();
 
 let result = merged.into_vec();
 assert_eq!(result, vec![9, 8, 7, 6, 5, 4, 3, 2, 1]);
 ```
 
-### Dynamic Iterator Addition
-
-```rust
-use iter_merge::Merged;
-
-let mut merged = Merged::new([vec![0, 1]]).build();
-assert_eq!(merged.next(), Some(0));
-
-merged.add_iter(vec![2]);
-merged.add_iters([vec![3], vec![4]]);
-
-let result = merged.into_vec();
-assert_eq!(result, vec![1, 2, 3, 4]);
-```
-
 ## Performance
 
-This library is optimized for merging small to medium numbers of iterators. When tested
-with ~1 000 000 random `u64`s:
-
-- Up to ~123 iterators: 2x faster than `itertools::kmerge`
-- Up to ~355 iterators: 1.5x faster than `itertools::kmerge`
-- Break-even point: ~682 iterators, after that the `O(iterator_count²)` starts to dominate
-- Performs better when an iterator contains a run of the min items
-- Arbitrary tie-breaking: 23% faster than stable tie-breaking
-- Unsafe optimizations: 49% faster than safe-only mode
+It's 1.45-1.65x faster than `itertools::kmerge` in my benchmarks and scales as `O(item_count + log₂(iterator_count))` (just as well as `itertools::kmerge`)
 
 ## Features
 
-The crate supports several feature flags:
-
-- `vec_storage` (default): Enable heap-allocated storage with `Vec`, requires `alloc`
-- `stackvec_storage`: Enable stack-allocated storage with `StackVec`
-- `forbid_unsafe`: Disable all unsafe code
+The crate supports following feature flags:
+- `alloc`: Enables heap-allocated storage with `VecStorage` and methods like `MergeIter::into_vec`
 
 ## Testing
 
-Run the fuzz test:
-* Uncomment `For fuzzing` blocks in the [Cargo.toml](Cargo.toml) or run `./toggle_fuzz_config.sh`
-* Run tests:
-  ```bash
-  cargo +nightly fuzzcheck fuzz_merge --test fuzz --profile fuzz
-  cargo +nightly fuzzcheck fuzz_merge_correctness --test fuzz --profile fuzz
-  ```
-
-Run benchmarks:
+Fuzzing:
+Use [`cargo-fuzz`](https://github.com/rust-fuzz/cargo-fuzz)
 
 ```bash
-RUSTFLAGS='-C target-cpu=native --cfg benchmarking'
-cargo bench
+cargo +nightly fuzz run fuzz_correctness
+cargo +nightly fuzz run fuzz_usage
 ```
-(Benchmarking dependencies are behind `benchmarking` cfg option to keep MSRV low)
+
+Miri:
+```bash
+cargo +nightly miri test
+```
+
+Benchmarks:
+```bash
+RUSTFLAGS='-C target-cpu=native --cfg benchmarking' cargo bench --bench benchmarks
+```
+(Benchmarking dependencies are behind `benchmarking` cfg option)
 
 ## MSRV
 The minimum supported Rust version for this crate is 1.68.0.

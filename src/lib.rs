@@ -1,23 +1,20 @@
 //! A high-performance iterator merging library.
 //!
-//! This crate provides efficient merging of multiple iterators into a single iterator.
-//! It supports both stable and arbitrary tie-breaking, custom comparison functions, and different
-//! storage backends for optimal performance in various scenarios.
+//! This crate provides [`MergeIter`] and a builder API to merge items from many iterators
+//! according to a comparator. By default, it performs a min-merge by [`Ord`], breaking ties
+//! by insertion order. It's `no_std`, with `Vec`-requiring functions behind the `alloc` feature.
 //!
-//! # Quick Start
+//! # Quick start
 //!
 //! ```
-//! # #[cfg(feature = "vec_storage")]
+//! # #[cfg(feature = "alloc")]
 //! # {
-//! use iter_merge::Merged;
+//! use iter_merge::merge;
 //!
-//! let vec1 = vec![1, 3, 5];
-//! let vec2 = vec![2, 4, 6];
-//!
-//! let mut merged = Merged::new([vec1.iter().copied(), vec2.iter().copied()]).build();
-//! let result = merged.into_vec();
-//!
-//! assert_eq!(result, vec![1, 2, 3, 4, 5, 6]);
+//! let a = vec![1, 3, 5];
+//! let b = vec![2, 4, 6];
+//! let merged = merge([a, b]).into_vec();
+//! assert_eq!(merged, vec![1, 2, 3, 4, 5, 6]);
 //! # }
 //! ```
 //!
@@ -25,81 +22,126 @@
 //! If the input iterators are not sorted, the result won't be sorted either:
 //!
 //! ```
-//! # #[cfg(feature = "vec_storage")]
+//! # #[cfg(feature = "alloc")]
 //! # {
-//! use iter_merge::Merged;
+//! use iter_merge::merge;
 //!
-//! let result = Merged::new([vec![2, 1, 5], vec![4, 3, 6]])
+//! let merged = merge([vec![2, 1, 5], vec![4, 3, 6]]).into_vec();
+//! assert_eq!(merged, vec![2, 1, 4, 3, 5, 6]);
+//! # }
+//! ```
+//!
+//! ## Array storage
+//!
+//! ```
+//! use core::pin::pin;
+//!
+//! use iter_merge::{ArrayStorage, MergeIter};
+//!
+//! // first create a storage with some fixed capacity
+//! let mut storage = ArrayStorage::<2, _>::from_iter([[1, 3, 5]]);
+//! // you can modify it, adding iterator of the same type
+//! storage.push([2, 4, 6]);
+//!
+//! // in order to construct a MergeIter you need to pin that storage.
+//! // You can't modify it once you've pinned it.
+//! let storage = pin!(storage);
+//! let mut merge = storage.build();
+//! assert!(merge.eq([1, 2, 3, 4, 5, 6]));
+//! ```
+//!
+//! # Custom comparator
+//!
+//! Use the builder to specify custom ordering (min/max by comparison function, by key, or by Ord).
+//! Implement a custom [`comparator`](crate::comparators::Comparator) for even more control.
+//! ```
+//! # #[cfg(feature = "alloc")]
+//! # {
+//! use iter_merge::{MergeIter, VecStorage};
+//!
+//! // Merge by descending absolute value
+//! let res = VecStorage::from_iter([vec![-3_i32, -1], vec![2, -2]])
+//!     .into_builder()
+//!     .max_by_key(|&x| x.abs())
 //!     .build()
 //!     .into_vec();
+//! assert_eq!(res, vec![-3, 2, -2, -1]);
+//! # }
+//! ```
 //!
-//! assert_eq!(result, vec![2, 1, 4, 3, 5, 6]);
+//! # Peeking and conditional consumption
+//! [`MergeIter`] provides the same methods as [`iter::Peekable`](core::iter::Peekable):
+//! ```
+//! # #[cfg(feature = "alloc")]
+//! # {
+//! use iter_merge::merge;
+//!
+//! let mut it = merge([vec![1, 1, 2], vec![1, 3]]);
+//! assert_eq!(it.peek(), Some(&1));
+//! // consume all 1s
+//! while let Some(1) = it.next_if_eq(&1) {}
+//! assert_eq!(it.next(), Some(2));
 //! # }
 //! ```
 //!
 //! # Performance
 //!
-//! This library is designed for high performance, especially when merging a small number of iterators.
-//! It scales as `O(iterator_count² + item_count)`, while [`itertools::kmerge`] scales as
-//! `O(iterator_count + item_count)` with a higher constant term.
-//!
-//! * Up to ~123 random iterators it's 2x faster than kmerge, at ~355 iterators it's 1.5x faster,
-//!   the break-even point is ~682 iterators, and at ~1363 iterators it's 2x slower.
-//! * If 1% of data is out of order (randomly swapped) the break-even point is ~1073 iterators
-//! * If the data is fully sorted the break-even point is ~2643 iterators
-//! * `arbitrary_tie_breaking()` is 1.23x faster than (default) `stable_tie_breaking`
-//! * Default implementation (with unsafe code) is 1.49x faster than fully safe implementation
-//!   (when `forbid_unsafe` feature is active)
+//! It's 1.45-1.65x faster than [`itertools::kmerge`] in my benchmarks and scales as
+//! `O(item_count + log₂(iterator_count))`
 //!
 //! <details>
-//!   <summary>Exact benchmark parameters</summary>
-//!   <ul>
-//!     <li>
-//!         Benchmarks were run on a fresh Ubuntu install on dedicated
-//!         Intel E-1270v3 (4 cores; 3.5GHz) server with maximal optimizations
-//!         (opt-level=3, lto=true, codegen-units=1, target-cpu=native)
-//!     </li>
-//!     <li><code>item_count</code> is <code>1 044 480</code> for comparisons with kmerge</li>
-//!     <li><code>arbitrary_tie_breaking()</code> is enabled, since this matches the kmerge</li>
-//!     <li>Exact iterator counts were interpolated</li>
-//!     <li>
-//!         <code>arbitrary_tie_breaking()</code> and <code>forbid_unsafe</code> performance
-//!         was evaluated with <code>1 048 576</code> items and <code>64</code> iterators
-//!     </li>
-//!   </ul>
+//!   <summary>Benchmark details</summary>
+//!   <p>
+//!     Benchmarks were run on a fresh Ubuntu install on dedicated
+//!     Intel E-1270v3 (4 cores; 3.5GHz) server with maximal optimizations
+//!     (opt-level=3, lto=true, codegen-units=1, target-cpu=native)
+//!   </p>
+//!   <p>
+//!     Iterators were over random u64's, and iterator itself had a size of 32 bytes long
+//!     (for reference Vec::into_iter has the same size). Expect bigger performance
+//!     improvements compared with <code>itertools::kmerge</code> when merging larger
+//!     iterators and/or iterators over large values, since the key difference between these
+//!     libraries is the use of pointer indirection in our heap, so we don't need to move
+//!     the pair of <code>(peeked_item, iterator)</code>, only pointers to them.
+//!   </p>
 //! </details>
 //!
-//! Unlike `kmerge`, which eagerly collects items into a min-heap, this library pulls items from
-//! input iterators *lazily* — items are only fetched as needed, and only the iterator containing
-//! the smallest item is advanced at each `.next()` call.
-//!
-//! For detailed performance numbers and scenarios, run the included benchmarks in the `benches/`
-//! directory.
+//! For detailed performance numbers in various scenarios, run the included benchmarks in the
+//! `benches/` directory.
 //!
 //! [`itertools::kmerge`]: https://docs.rs/itertools/0.14.0/itertools/trait.Itertools.html#method.kmerge
 //!
 //! # Crate Features
-//!
-//! - `vec_storage`: Enables heap-allocated storage with `Vec` (enabled by default)
-//! - `stackvec_storage`: Enables stack-allocated storage with `with_stackvec_storage()`
-//! - `forbid_unsafe`: Prevents the use of unsafe code throughout the crate
-//!
-//! See the documentation for individual types and methods for more detailed examples.
-
+//! - `alloc`: Enables heap-allocated storage with [`VecStorage`] and methods like
+//!   [`MergeIter::into_vec`]
 #![no_std]
-#![cfg_attr(feature = "forbid_unsafe", forbid(unsafe_code))]
-#![cfg_attr(fuzzing, feature(coverage_attribute))]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+#![cfg_attr(not(feature = "alloc"), allow(unused))]
 
-#[cfg(feature = "vec_storage")]
+#[cfg(feature = "alloc")]
 extern crate alloc;
 
-mod builder;
-mod iter;
-mod storage;
+pub mod comparators;
+pub mod merge_iter;
+pub mod storage;
 
-pub use builder::Merged;
-pub use iter::MergedIter;
+pub use merge_iter::MergeIter;
+pub use storage::ArrayStorage;
+#[cfg(feature = "alloc")]
+pub use storage::VecStorage;
+
+#[cfg(feature = "alloc")]
+mod convenience;
+#[cfg(feature = "alloc")]
+pub use convenience::*;
+
+pub mod internal;
+
+#[cfg(any(fuzzing, test))]
+#[doc(hidden)]
+pub mod tests;
+
 
 #[doc(hidden)]
-#[cfg_attr(feature="vec_storage", doc = include_str!("../README.md"))]
+#[cfg_attr(feature="alloc", doc = include_str!("../README.md"))]
 struct _ReadmeTest;

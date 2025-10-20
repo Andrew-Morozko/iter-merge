@@ -10,35 +10,83 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install cargo-hack
-      uses: taiki-e/install-action@cargo-hack
-    - name: Build
-      run: cargo hack build --feature-powerset --at-least-one-of="vec_storage,stackvec_storage" --verbose
-
   test:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: Install cargo-hack
-      uses: taiki-e/install-action@cargo-hack
     - name: Run tests
-      run: cargo hack test --feature-powerset --at-least-one-of="vec_storage,stackvec_storage" --verbose
+      run: cargo test --verbose
 
-  msrv:
+  test-no-alloc:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - uses: taiki-e/install-action@v2
+    - name: Run tests
+      run: cargo test --no-default-features --verbose
+
+  msrv:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
-        tool: cargo-msrv
-    - name: Run MSRV check
-      run:
-        cargo msrv verify --ignore-lockfile -- cargo test &&
-        cargo msrv verify --ignore-lockfile -- cargo test --no-default-features --features="stackvec_storage"
+        toolchain: 1.68.2
+        override: true
+    - run: cargo test --doc --verbose
+
+  miri:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+        components: miri
+    - name: Run tests
+      run: cargo +nightly miri test --verbose
+
+  fuzz:
+    runs-on: ubuntu-latest
+    env:
+      # The number of seconds to run the fuzz target
+      FUZZ_TIME: 90
+      CARGO_FUZZ_VERSION: 0.13.1
+
+    strategy:
+      matrix:
+        include:
+          - fuzz_target: fuzz_correctness
+          - fuzz_target: fuzz_usage
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+        components: rust-src
+
+    - uses: actions/cache@v4
+      id: cache-cargo-fuzz
+      with:
+        path: ${{ runner.tool_cache }}/cargo-fuzz
+        key: cargo-fuzz-bin-${{ env.CARGO_FUZZ_VERSION }}
+    - run: echo "${{ runner.tool_cache }}/cargo-fuzz/bin" >> $GITHUB_PATH
+    - name: populate cache
+      if: steps.cache-cargo-fuzz.outputs.cache-hit != 'true'
+      run: cargo +nightly install --root "${{ runner.tool_cache }}/cargo-fuzz" --version ${{ env.CARGO_FUZZ_VERSION }} cargo-fuzz --locked
+
+    # Run the fuzz target.
+    - run: cargo fuzz run ${{ matrix.fuzz_target }} --careful --jobs $(nproc) -- -max_total_time=${{ env.FUZZ_TIME }}
+
+    # Upload fuzzing artifacts on failure for post-mortem debugging.
+    - uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: fuzzing-artifacts-${{ matrix.fuzz_target }}-${{ github.sha }}
+        path: fuzz/artifacts

@@ -1,68 +1,56 @@
-#[cfg(not(any(feature = "vec_storage", feature = "stackvec_storage")))]
-compile_error!(
-    "At least one storage feature must be enabled ('vec_storage' or 'stackvec_storage')"
-);
+//! Storage backends
 
-mod private {
-    pub struct SealedToken;
+pub(crate) mod array;
+pub use array::*;
+#[cfg(feature = "alloc")]
+pub(crate) mod vec;
+use core::fmt::Debug;
+
+#[cfg(feature = "alloc")]
+pub use vec::*;
+
+use crate::{
+    comparators::{ByOrd, tie_breaker},
+    internal::{PeekIter, StorageOps},
+    merge_iter::DefaultBuilder,
+};
+
+/// Marker trait for [`MergeIter`](crate::MergeIter) storage.
+pub trait Storage: StorageOps + Sized {
+    /// Create a new builder with default parameters for this storage
+    #[inline]
+    fn into_builder(self) -> DefaultBuilder<Self> {
+        DefaultBuilder::new(self, ByOrd, tie_breaker::InsertionOrder)
+    }
 }
 
-pub(crate) use private::SealedToken;
+impl<S: StorageOps + Sized> Storage for S {}
 
-/// Sealed storage trait for this crate. Methods may use unsafe, relying on safety
-/// guaranteed by the caller, which is only this crate.
-///
-/// Why method sealing? Because otherwise users could use the methods, which may be
-/// unsafe, but not marked as such.
-/// Why not mark them as unsafe? Because if the library is compiled with `forbid_unsafe` feature,
-/// then the methods *are* safe internally, but we can't call them because of the restriction.
-///
-/// This trait is public only to get around exposing restrictions in earlier rust versions.
-///
-/// # SAFETY
-/// The caller must ensure that:
-/// * The indices in all methods are valid (< len)
-///
-/// The implementer must guarantee that:
-/// * `push` adds a single element at the end of the collection
-/// * `remove` removes a single element at the given index, moving the rest
-///   of the collection one position to the left
-/// * `swap_remove` removes a single element at the given index, replacing it with the last element
-/// * `len` returns the number of elements in the collection
-/// * `get` returns a reference to the element at the given index
-/// * `get_mut` returns a mutable reference to the element at the given index
-#[doc(hidden)]
-pub trait Storage {
-    type Item;
-    fn new(_: SealedToken) -> Self;
-    fn push(&mut self, value: Self::Item, _: SealedToken);
-    fn remove(&mut self, index: usize, _: SealedToken) -> Self::Item;
-    fn swap_remove(&mut self, index: usize, _: SealedToken) -> Self::Item;
-    fn len(&self, _: SealedToken) -> usize;
-    fn get(&self, index: usize, _: SealedToken) -> &Self::Item;
-    fn get_mut(&mut self, index: usize, _: SealedToken) -> &mut Self::Item;
-    /// Rationale for this signature:
-    /// We avoid calling `size_hint` for Storage implementations
-    /// that have a fixed capacity.
-    fn reserve_for<I: Iterator>(&mut self, iter: &I, _: SealedToken);
+struct DebugFormatter<'a, S>(&'a S);
+
+impl<S> Debug for DebugFormatter<'_, S>
+where
+    S: Storage,
+    PeekIter<S::IT>: Debug,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut d = f.debug_list();
+        self.0.map_items(|it| {
+            d.entry(it);
+        });
+        d.finish()
+    }
 }
 
-/// Chooses to use safe or unsafe implementation depending on enabled cfg options
-macro_rules! select {
-    ($safe:expr; unsafe { $unsafe:expr }) => {
-        #[cfg(any(debug_assertions, feature = "forbid_unsafe", test))]
-        {
-            $safe
-        }
-        #[cfg(not(any(debug_assertions, feature = "forbid_unsafe", test)))]
-        unsafe {
-            $unsafe
-        }
-    };
+/// Utility that returns a [`Debug`] formatter of the items in [`Storage`]
+///
+/// Items are shown using standard [`debug_list`](core::fmt::Formatter::debug_list) format.
+/// See [this `Debug` impl](crate::storage::InternalArrayStorage::fmt) for an example.
+#[inline]
+pub fn debug_formatter<S>(storage: &'_ S) -> impl Debug + '_
+where
+    S: Storage,
+    PeekIter<S::IT>: Debug,
+{
+    DebugFormatter(storage)
 }
-
-#[cfg(feature = "vec_storage")]
-mod vec;
-
-#[cfg(feature = "stackvec_storage")]
-mod stackvec;

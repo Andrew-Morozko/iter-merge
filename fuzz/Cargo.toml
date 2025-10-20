@@ -1,0 +1,28 @@
+[package]
+name = "iter-merge-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.iter-merge]
+path = ".."
+
+[[bin]]
+name = "fuzz_usage"
+path = "fuzz_targets/fuzz_usage.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_correctness"
+path = "fuzz_targets/fuzz_correctness.rs"
+test = false
+doc = false
+bench = false
