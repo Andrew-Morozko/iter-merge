@@ -38,13 +38,13 @@
 //!
 //! use iter_merge::{ArrayStorage, MergeIter};
 //!
-//! // first create a storage with some fixed capacity
+//! // First create a storage with some fixed capacity
 //! let mut storage = ArrayStorage::<2, _>::from_iter([[1, 3, 5]]);
-//! // you can modify it, adding iterator of the same type
+//! // You can modify it by adding iterators of the same type
 //! storage.push([2, 4, 6]);
 //!
-//! // in order to construct a MergeIter you need to pin that storage.
-//! // You can't modify it once you've pinned it.
+//! // In order to construct a MergeIter you need to pin that storage.
+//! // You won't be able to modify it once you've pinned it.
 //! let storage = pin!(storage);
 //! let mut merge = storage.build();
 //! assert!(merge.eq([1, 2, 3, 4, 5, 6]));

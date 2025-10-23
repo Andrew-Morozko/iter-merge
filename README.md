@@ -43,11 +43,31 @@ let mut merged = VecStorage::from_iter([
     vec![7, 4, 1],
 ])
 .into_builder()
-.max_by(ByOrd)
+.max_by(ByOrd) // {min|max}{_by|_by_func|_by_key}
 .build();
 
 let result = merged.into_vec();
 assert_eq!(result, vec![9, 8, 7, 6, 5, 4, 3, 2, 1]);
+```
+
+### Array storage (no-alloc compatible)
+
+```rust
+use core::pin::pin;
+
+use iter_merge::{ArrayStorage, MergeIter};
+
+// First create a fixed-capacity array storage
+let storage = ArrayStorage::from_arr([
+    [1, 3, 5],
+    [2, 4, 6]
+]);
+
+// In order to construct a MergeIter you need to pin that storage.
+// You won't be able to modify it once you've pinned it.
+let storage = pin!(storage);
+let mut merge = storage.build();
+assert!(merge.eq([1, 2, 3, 4, 5, 6]));
 ```
 
 ## Performance
